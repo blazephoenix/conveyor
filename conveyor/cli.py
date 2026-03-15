@@ -63,7 +63,10 @@ def init():
 
 
 @app.command()
-def intent(message: str = typer.Argument(..., help="The intent to execute")):
+def intent(
+    message: str = typer.Argument(..., help="The intent to execute"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Auto-approve the plan without prompting"),
+):
     """Decompose an intent into a task graph and execute it."""
     import json
     from pathlib import Path
@@ -95,6 +98,8 @@ def intent(message: str = typer.Argument(..., help="The intent to execute")):
     if claude_md_path.exists():
         claude_md = claude_md_path.read_text()
 
+    import time as _time
+
     # Run orchestrator with progress
     console.print()
     console.print("[bold]┌[/bold]   [bold]conveyor intent[/bold]")
@@ -102,8 +107,15 @@ def intent(message: str = typer.Argument(..., help="The intent to execute")):
     console.print(f"[bold]│[/bold]  Intent: [cyan]{message}[/cyan]")
     console.print("[bold]│[/bold]")
 
+    intent_start = _time.monotonic()
+
+    def _elapsed() -> str:
+        secs = int(_time.monotonic() - intent_start)
+        mins, secs = divmod(secs, 60)
+        return f"{mins}m{secs:02d}s" if mins else f"{secs}s"
+
     def orchestrator_progress(msg: str) -> None:
-        console.print(f"[bold]│[/bold]  [dim]{msg}[/dim]")
+        console.print(f"[bold]│[/bold]  [dim][{_elapsed()}][/dim] {msg}")
 
     graph = run_orchestrator(
         intent_message=message,
@@ -148,10 +160,11 @@ def intent(message: str = typer.Argument(..., help="The intent to execute")):
     console.print()
 
     # Approval prompt
-    choice = typer.prompt("[a]pprove  [r]eject", default="a")
-    if choice.lower() != "a":
-        console.print("Rejected.")
-        raise typer.Exit(0)
+    if not yes:
+        choice = typer.prompt("[a]pprove  [r]eject", default="a")
+        if choice.lower() != "a":
+            console.print("Rejected.")
+            raise typer.Exit(0)
 
     # Create intent and issues
     intent_id = store.next_intent_id()
@@ -195,11 +208,28 @@ def intent(message: str = typer.Argument(..., help="The intent to execute")):
 
     # Run the state machine
     console.print("[bold]│[/bold]")
-    console.print("[bold]◇[/bold]  [bold]Executing task graph...[/bold]")
+    total_tasks = len(issues_list)
+    # Each task goes through ~3 phases: agent, validation, merge
+    total_steps = total_tasks * 3
+    step_counter = [0]  # mutable for closure
+
+    def _pct() -> str:
+        pct = min(100, int(step_counter[0] / total_steps * 100))
+        return f"{pct}%"
+
+    console.print(f"[bold]◇[/bold]  [bold]Executing task graph...[/bold] ({total_tasks} tasks)")
     console.print("[bold]│[/bold]")
 
     def execution_progress(msg: str) -> None:
-        console.print(f"[bold]│[/bold]  [dim]{msg}[/dim]")
+        # Advance step counter based on key milestones
+        lower = msg.lower()
+        if "dispatching" in lower and "reviewer" not in lower:
+            step_counter[0] += 1  # agent start
+        elif "dispatching reviewer" in lower:
+            step_counter[0] += 1  # validation
+        elif "auto-merged" in lower or "complete" in lower or "failed" in lower.split("—")[0]:
+            step_counter[0] += 1  # merge/complete
+        console.print(f"[bold]│[/bold]  [dim][{_elapsed()} | {_pct()}][/dim] {msg}")
 
     def on_pause(paused_issue: Issue) -> bool:
         review_type = paused_issue.review_type
@@ -226,6 +256,7 @@ def intent(message: str = typer.Argument(..., help="The intent to execute")):
     failed = sum(1 for i in issues_list if i.status == IssueStatus.FAILED)
     blocked = sum(1 for i in issues_list if i.status == IssueStatus.BLOCKED)
 
+    total_time = _elapsed()
     console.print("[bold]◇[/bold]  [bold]Summary[/bold] ─────────────────────────────────────╮")
     console.print("[bold]│[/bold]                                                    [bold]│[/bold]")
     if completed == len(issues_list):
@@ -234,6 +265,7 @@ def intent(message: str = typer.Argument(..., help="The intent to execute")):
     else:
         console.print(f"[bold]│[/bold]  Completed: {completed}  Failed: {failed}  Blocked: {blocked}              [bold]│[/bold]")
         intent_obj.status = "partial"
+    console.print(f"[bold]│[/bold]  Total time: {total_time}                                  [bold]│[/bold]")
     console.print("[bold]│[/bold]                                                    [bold]│[/bold]")
     console.print("[bold]├[/bold]────────────────────────────────────────────────────╯")
     console.print("[bold]│[/bold]")

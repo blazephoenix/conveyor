@@ -25,8 +25,11 @@ class ClaudeCodeAdapter:
                 timeout=timeout,
             )
             duration = time.monotonic() - start
+            output = result.stdout
+            if result.returncode != 0 and result.stderr:
+                output = f"{output}\n\nSTDERR:\n{result.stderr}" if output else result.stderr
             return AgentResult(
-                output=result.stdout,
+                output=output,
                 exit_code=result.returncode,
                 duration_seconds=duration,
             )
