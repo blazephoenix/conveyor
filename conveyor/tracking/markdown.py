@@ -115,6 +115,8 @@ class MarkdownStore:
             fm["review_type"] = issue.review_type
 
         body = f"# {issue.title}\n\n"
+        if issue.agent_prompt:
+            body += f"## Agent prompt\n{issue.agent_prompt}\n\n"
         body += "## Acceptance criteria\n"
         for c in issue.acceptance_criteria:
             body += f"- [ ] {c}\n"
@@ -142,6 +144,7 @@ class MarkdownStore:
             risk=RiskLevel(fm.get("risk", "low")),
             files_allowed=self._parse_file_list(body, "Files allowed"),
             files_forbidden=self._parse_file_list(body, "Files forbidden"),
+            agent_prompt=self._extract_section(body, "Agent prompt"),
             agent_report=self._extract_section(body, "Agent report"),
             reviewer_verdict=self._extract_section(body, "Reviewer verdict"),
             review_type=fm.get("review_type", ""),

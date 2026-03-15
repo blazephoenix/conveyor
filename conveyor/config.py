@@ -17,6 +17,7 @@ class ConveyorConfig:
         default_factory=lambda: ["frontend", "backend", "testing", "devops", "reviewer"]
     )
     test_command: str = ""
+    permission_mode: str = "bypassPermissions"
 
 
 def default_config() -> ConveyorConfig:
@@ -42,6 +43,9 @@ def save_config(cfg: ConveyorConfig, path: Path) -> None:
         '',
         '[testing]',
         f'command = "{cfg.test_command}"',
+        '',
+        '[claude]',
+        f'permission_mode = "{cfg.permission_mode}"',
     ]
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n")
@@ -77,6 +81,7 @@ def load_config(path: Path) -> ConveyorConfig:
     cfg.review_medium_risk = _bool("review_medium_risk", cfg.review_medium_risk)
     cfg.review_high_risk = _bool("review_high_risk", cfg.review_high_risk)
     cfg.test_command = _str("command", cfg.test_command)
+    cfg.permission_mode = _str("permission_mode", cfg.permission_mode)
 
     roster_match = re.search(r'roster\s*=\s*\[(.+?)\]', text)
     if roster_match:

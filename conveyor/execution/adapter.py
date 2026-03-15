@@ -8,7 +8,7 @@ from conveyor.tracking.models import AgentResult
 
 
 class ClaudeCodeAdapter:
-    def __init__(self, permission_mode: str = "acceptEdits"):
+    def __init__(self, permission_mode: str = "bypassPermissions"):
         self.permission_mode = permission_mode
 
     def execute(self, prompt: str, workdir: str, timeout: int = 300) -> AgentResult:

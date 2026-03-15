@@ -169,7 +169,8 @@ def intent(message: str = typer.Argument(..., help="The intent to execute")):
         task_num_to_issue_id[t["task_number"]] = issue_id
 
         dep_ids = [task_num_to_issue_id[d] for d in t.get("depends_on", []) if d in task_num_to_issue_id]
-        slug = t["title"].lower().replace(" ", "-")[:30]
+        import re
+        slug = re.sub(r"[^a-z0-9]+", "-", t["title"].lower()).strip("-")[:30].rstrip("-")
         branch = f"conveyor/{issue_id.lower()}-{slug}"
 
         issue_obj = Issue(

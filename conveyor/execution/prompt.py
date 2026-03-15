@@ -64,21 +64,29 @@ The following upstream tasks have already been completed and merged:
 Files you MUST NOT touch: {forbidden}
 Stay within your assigned scope. Do not refactor unrelated code.""")
 
-    # Section 6: Reporting
-    sections.append("""## 6. Reporting
+    # Section 6: Commit and Report
+    sections.append("""## 6. Commit and Report
 
-When you are done, output a report block in EXACTLY this format:
+When you are done with your changes:
 
-```
-CONVEYOR_REPORT_START
-files_created: <comma-separated list>
-files_modified: <comma-separated list>
-lines_added: <number>
-tests_added: <number>
-tests_passing: <true/false>
-notes: <brief summary of what you did>
-CONVEYOR_REPORT_END
-```""")
+1. **Stage and commit ALL your changes** — this is mandatory:
+   ```
+   git add -A
+   git commit -m "conveyor: <brief description of what you did>"
+   ```
+   Do NOT skip the commit. Your work will be rejected if it is not committed.
+
+2. **Output a report block** in EXACTLY this format:
+   ```
+   CONVEYOR_REPORT_START
+   files_created: <comma-separated list>
+   files_modified: <comma-separated list>
+   lines_added: <number>
+   tests_added: <number>
+   tests_passing: <true/false>
+   notes: <brief summary of what you did>
+   CONVEYOR_REPORT_END
+   ```""")
 
     # Agent history
     if agent.issues_completed:

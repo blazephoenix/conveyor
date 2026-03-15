@@ -53,7 +53,7 @@ class Runner:
         self.store = store
         self.config = config
         self.repo_dir = repo_dir
-        self.adapter = adapter or ClaudeCodeAdapter()
+        self.adapter = adapter or ClaudeCodeAdapter(permission_mode=config.permission_mode)
         self._issue_map = {i.id: i for i in issues}
         self._on_progress = on_progress
 
@@ -344,5 +344,9 @@ class Runner:
 
             events = self.advance_once()
             all_events.extend(events)
+
+        # Always return to main branch when done
+        self._emit_progress("Returning to main branch")
+        checkout_branch("main", self.repo_dir)
 
         return all_events
