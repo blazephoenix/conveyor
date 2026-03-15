@@ -8,6 +8,8 @@ from dataclasses import dataclass
 
 @dataclass
 class TestResult:
+    __test__ = False  # Not a pytest test class
+
     output: str
     exit_code: int
 
