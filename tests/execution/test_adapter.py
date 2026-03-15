@@ -26,6 +26,8 @@ def test_adapter_calls_claude_code(mock_run, tmp_path):
     cmd = call_args[0][0]
     assert "claude" in cmd[0]
     assert "--print" in cmd
+    assert "--permission-mode" in cmd
+    assert "acceptEdits" in cmd
     assert result.output == "Agent output here"
     assert result.exit_code == 0
     assert result.success is True

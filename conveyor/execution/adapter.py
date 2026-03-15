@@ -8,11 +8,17 @@ from conveyor.tracking.models import AgentResult
 
 
 class ClaudeCodeAdapter:
+    def __init__(self, permission_mode: str = "acceptEdits"):
+        self.permission_mode = permission_mode
+
     def execute(self, prompt: str, workdir: str, timeout: int = 300) -> AgentResult:
         start = time.monotonic()
         try:
             result = subprocess.run(
-                ["claude", "--print", "-p", prompt],
+                [
+                    "claude", "--print", "-p", prompt,
+                    "--permission-mode", self.permission_mode,
+                ],
                 cwd=workdir,
                 capture_output=True,
                 text=True,
