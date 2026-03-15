@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Callable
 
 from conveyor.config import ConveyorConfig
 from conveyor.core.governance import auto_merge_allowed, needs_plan_approval
@@ -46,6 +47,7 @@ class Runner:
         config: ConveyorConfig,
         repo_dir: Path,
         adapter: ClaudeCodeAdapter | None = None,
+        on_progress: Callable[[str], None] | None = None,
     ):
         self.issues = issues
         self.store = store
@@ -53,6 +55,11 @@ class Runner:
         self.repo_dir = repo_dir
         self.adapter = adapter or ClaudeCodeAdapter()
         self._issue_map = {i.id: i for i in issues}
+        self._on_progress = on_progress
+
+    def _emit_progress(self, msg: str) -> None:
+        if self._on_progress:
+            self._on_progress(msg)
 
     def all_terminal(self) -> bool:
         return all(
@@ -141,16 +148,19 @@ class Runner:
         emit(issue.activity_log, issue.id, "agent_start", f"{issue.agent} agent executing")
 
         # Create branch
+        self._emit_progress(f"[{issue.id}] Creating branch {issue.branch}")
         checkout_branch("main", self.repo_dir)
         create_branch(issue.branch, self.repo_dir)
 
         # Load agent
+        self._emit_progress(f"[{issue.id}] Loading {issue.agent} agent")
         try:
             agent = self.store.load_agent(issue.agent)
         except FileNotFoundError:
             agent = Agent(name=issue.agent, role=issue.agent)
 
         # Gather context
+        self._emit_progress(f"[{issue.id}] Gathering codebase context for {', '.join(issue.files_allowed)}")
         completed_files = []
         for dep_id in issue.depends_on:
             dep = self._issue_map.get(dep_id)
@@ -163,8 +173,11 @@ class Runner:
             sibling_patterns=[],
         )
         prior = gather_prior_work(self.repo_dir, completed_files)
+        if completed_files:
+            self._emit_progress(f"[{issue.id}] Loaded prior work from {len(completed_files)} upstream files")
 
         # Build prompt and execute
+        self._emit_progress(f"[{issue.id}] Dispatching {issue.agent} agent — {issue.title}")
         prompt = build_worker_prompt(
             issue=issue,
             agent=agent,
@@ -186,10 +199,12 @@ class Runner:
         report = parse_agent_report(result.output)
         if report:
             issue.agent_report = "\n".join(f"{k}: {v}" for k, v in report.items())
+            self._emit_progress(f"[{issue.id}] Agent report: {report.get('notes', 'done')}")
 
         if result.success:
             issue.status = IssueStatus.VALIDATING
             emit(issue.activity_log, issue.id, "agent_done", f"completed in {result.duration_seconds:.1f}s")
+            self._emit_progress(f"[{issue.id}] Agent completed in {result.duration_seconds:.1f}s — moving to validation")
             events.append(f"{issue.id}: agent completed -> validating")
         else:
             issue.status = IssueStatus.FAILED
@@ -203,18 +218,31 @@ class Runner:
         events = []
 
         # Run tests
+        if self.config.test_command:
+            self._emit_progress(f"[{issue.id}] Running tests: {self.config.test_command}")
+        else:
+            self._emit_progress(f"[{issue.id}] No test command configured — skipping tests")
         test_result = run_tests(self.config.test_command, str(self.repo_dir))
+        self._emit_progress(f"[{issue.id}] Tests {'passed' if test_result.passed else 'FAILED'}")
         emit(issue.activity_log, issue.id, "tests",
              f"{'passed' if test_result.passed else 'failed'}")
 
         # Get diff and check scope
+        self._emit_progress(f"[{issue.id}] Checking diff and scope compliance...")
         diff = branch_diff(issue.branch, "main", self.repo_dir)
         files_changed = changed_files(issue.branch, "main", self.repo_dir)
+        if files_changed:
+            self._emit_progress(f"[{issue.id}] Files changed: {', '.join(files_changed)}")
         scope_ok, violations = check_scope(
             files_changed, issue.files_allowed, issue.files_forbidden
         )
+        if not scope_ok:
+            self._emit_progress(f"[{issue.id}] Scope violation: {'; '.join(violations)}")
+        else:
+            self._emit_progress(f"[{issue.id}] Scope check passed")
 
         # Run reviewer agent
+        self._emit_progress(f"[{issue.id}] Dispatching reviewer agent...")
         reviewer_prompt = build_reviewer_prompt(
             issue=issue,
             diff=diff,
@@ -228,6 +256,7 @@ class Runner:
         )
         verdict = parse_reviewer_verdict(review_result.output)
         issue.reviewer_verdict = "\n".join(f"{k}: {v}" for k, v in verdict.items())
+        self._emit_progress(f"[{issue.id}] Reviewer verdict: {'PASSED' if verdict.get('passed') == 'true' else 'REJECTED'} — {verdict.get('notes', '')}")
 
         passed = verdict.get("passed", "false") == "true" and scope_ok and test_result.passed
 

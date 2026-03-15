@@ -15,51 +15,50 @@ def init():
     repo_dir = Path.cwd()
     result = run_init(repo_dir)
 
-    banner = """
-   _____ ____  _   ___     _______ ____  ____
-  / ____/ __ \\| \\ | \\ \\   / / ____\\ \\/ / __ \\
- | |   | |  | |  \\| |\\ \\_/ / |     \\  / |  | |
- | |   | |  | | . ` | \\   /| |__    | || |  | |
- | |___| |__| | |\\  |  | | | |___   | || |__| |
-  \\_____\\____/|_| \\_|  |_| |______|_/ \\_\\____/
-
-    AI-native project orchestration
-"""
-    console.print(banner, style="bold cyan")
-
-    # Summary
-    details = []
-    details.append(f"[green]v[/green] Initialized .conveyor/")
-    details.append(f"[green]v[/green] Scanned {result.file_count} files")
-    if result.stack_detected:
-        details.append(f"[green]v[/green] Detected: [bold]{', '.join(result.stack_detected)}[/bold]")
-    if result.claude_md:
-        details.append(f"[green]v[/green] CLAUDE.md found — using as project profile")
-    details.append(f"[green]v[/green] Agents ready: frontend, backend, testing, devops, reviewer")
-
-    console.print(Panel("\n".join(details), title="Project Setup", border_style="green"))
-    console.print()
-
-    # Getting started
-    help_text = (
-        "[bold]Get started:[/bold]\n"
+    banner = (
         "\n"
-        "  conveyor intent [cyan]\"Add user authentication\"[/cyan]\n"
-        "    Decompose an intent into tasks, execute, and merge\n"
-        "\n"
-        "  conveyor status\n"
-        "    Show current intent progress\n"
-        "\n"
-        "  conveyor issues [dim][ISSUE_ID][/dim]\n"
-        "    List all issues or inspect a specific one\n"
-        "\n"
-        "  conveyor review\n"
-        "    Review pending medium/high risk merges\n"
-        "\n"
-        "  conveyor log [dim]--issue ISS-001[/dim]\n"
-        "    Show activity trail\n"
+        "[bold cyan]"
+        " ██████╗ ██████╗ ███╗   ██╗██╗   ██╗███████╗██╗   ██╗ ██████╗ ██████╗ \n"
+        "██╔════╝██╔═══██╗████╗  ██║██║   ██║██╔════╝╚██╗ ██╔╝██╔═══██╗██╔══██╗\n"
+        "██║     ██║   ██║██╔██╗ ██║██║   ██║█████╗   ╚████╔╝ ██║   ██║██████╔╝\n"
+        "██║     ██║   ██║██║╚██╗██║╚██╗ ██╔╝██╔══╝    ╚██╔╝  ██║   ██║██╔══██╗\n"
+        "╚██████╗╚██████╔╝██║ ╚████║ ╚████╔╝ ███████╗   ██║   ╚██████╔╝██║  ██║\n"
+        " ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝  ╚═══╝  ╚══════╝   ╚═╝    ╚═════╝ ╚═╝  ╚═╝\n"
+        "[/bold cyan]"
+        "  [dim]───────────────────────────────────────────────────────[/dim]\n"
+        "  AI-native project orchestration\n"
     )
-    console.print(Panel(help_text, title="Commands", border_style="dim"))
+    console.print(banner)
+
+    console.print("[bold]┌[/bold]   [bold]conveyor init[/bold]")
+    console.print("[bold]│[/bold]")
+    console.print(f"[bold]│[/bold]  Project: {repo_dir}")
+    console.print("[bold]│[/bold]")
+
+    console.print(f"[bold]◆[/bold]  Initialized .conveyor/")
+    console.print(f"[bold]│[/bold]")
+    console.print(f"[bold]◆[/bold]  Scanned {result.file_count} files")
+    if result.stack_detected:
+        console.print(f"[bold]│[/bold]")
+        console.print(f"[bold]◇[/bold]  Detected: [bold]{', '.join(result.stack_detected)}[/bold]")
+    if result.claude_md:
+        console.print(f"[bold]│[/bold]")
+        console.print(f"[bold]◇[/bold]  CLAUDE.md found — using as project profile")
+    console.print(f"[bold]│[/bold]")
+    console.print(f"[bold]◆[/bold]  Agents created: frontend, backend, testing, devops, reviewer")
+
+    console.print("[bold]│[/bold]")
+    console.print("[bold]◇[/bold]  [bold]Next commands[/bold] ────────────────────────────────╮")
+    console.print("[bold]│[/bold]                                                    [bold]│[/bold]")
+    console.print("[bold]│[/bold]  [cyan]conveyor intent \"...\"[/cyan]  Decompose and execute     [bold]│[/bold]")
+    console.print("[bold]│[/bold]  [cyan]conveyor status[/cyan]       Show intent progress       [bold]│[/bold]")
+    console.print("[bold]│[/bold]  [cyan]conveyor issues[/cyan]       List or inspect issues      [bold]│[/bold]")
+    console.print("[bold]│[/bold]  [cyan]conveyor review[/cyan]       Review pending merges       [bold]│[/bold]")
+    console.print("[bold]│[/bold]  [cyan]conveyor log[/cyan]          Show activity trail         [bold]│[/bold]")
+    console.print("[bold]│[/bold]                                                    [bold]│[/bold]")
+    console.print("[bold]├[/bold]────────────────────────────────────────────────────╯")
+    console.print("[bold]│[/bold]")
+    console.print("[bold]└[/bold]  Ready!")
 
 
 @app.command()
@@ -95,13 +94,23 @@ def intent(message: str = typer.Argument(..., help="The intent to execute")):
     if claude_md_path.exists():
         claude_md = claude_md_path.read_text()
 
-    # Run orchestrator
-    console.print("\nOrchestrator analyzing codebase...\n")
+    # Run orchestrator with progress
+    console.print()
+    console.print("[bold]┌[/bold]   [bold]conveyor intent[/bold]")
+    console.print("[bold]│[/bold]")
+    console.print(f"[bold]│[/bold]  Intent: [cyan]{message}[/cyan]")
+    console.print("[bold]│[/bold]")
+
+    def orchestrator_progress(msg: str) -> None:
+        console.print(f"[bold]│[/bold]  [dim]{msg}[/dim]")
+
     graph = run_orchestrator(
         intent_message=message,
         repo_dir=repo_dir,
         claude_md=claude_md,
+        on_progress=orchestrator_progress,
     )
+    console.print("[bold]│[/bold]")
 
     if not graph.tasks:
         console.print("[red]Orchestrator could not produce a plan.[/red]")
@@ -184,7 +193,12 @@ def intent(message: str = typer.Argument(..., help="The intent to execute")):
     store.save_intent(intent_obj)
 
     # Run the state machine
-    console.print("\nExecuting...\n")
+    console.print("[bold]│[/bold]")
+    console.print("[bold]◇[/bold]  [bold]Executing task graph...[/bold]")
+    console.print("[bold]│[/bold]")
+
+    def execution_progress(msg: str) -> None:
+        console.print(f"[bold]│[/bold]  [dim]{msg}[/dim]")
 
     def on_pause(paused_issue: Issue) -> bool:
         review_type = paused_issue.review_type
@@ -200,22 +214,32 @@ def intent(message: str = typer.Argument(..., help="The intent to execute")):
         store=store,
         config=config,
         repo_dir=repo_dir,
+        on_progress=execution_progress,
     )
 
     events = runner.run(on_pause=on_pause)
 
     # Summary
-    console.print()
+    console.print("[bold]│[/bold]")
     completed = sum(1 for i in issues_list if i.status == IssueStatus.COMPLETE)
     failed = sum(1 for i in issues_list if i.status == IssueStatus.FAILED)
     blocked = sum(1 for i in issues_list if i.status == IssueStatus.BLOCKED)
 
+    console.print("[bold]◇[/bold]  [bold]Summary[/bold] ─────────────────────────────────────╮")
+    console.print("[bold]│[/bold]                                                    [bold]│[/bold]")
     if completed == len(issues_list):
-        console.print(f"[green]Intent complete. {completed} tasks merged.[/green]")
+        console.print(f"[bold]│[/bold]  [green]All {completed} tasks completed and merged[/green]         [bold]│[/bold]")
         intent_obj.status = "complete"
     else:
-        console.print(f"Completed: {completed}, Failed: {failed}, Blocked: {blocked}")
+        console.print(f"[bold]│[/bold]  Completed: {completed}  Failed: {failed}  Blocked: {blocked}              [bold]│[/bold]")
         intent_obj.status = "partial"
+    console.print("[bold]│[/bold]                                                    [bold]│[/bold]")
+    console.print("[bold]├[/bold]────────────────────────────────────────────────────╯")
+    console.print("[bold]│[/bold]")
+    if completed == len(issues_list):
+        console.print("[bold]└[/bold]  [green]Intent complete![/green]")
+    else:
+        console.print("[bold]└[/bold]  Run [cyan]conveyor status[/cyan] or [cyan]conveyor issues[/cyan] for details")
 
     store.save_intent(intent_obj)
 
