@@ -49,6 +49,7 @@ class Issue:
     acceptance_criteria: list[str] = field(default_factory=list)
     created: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     completed: datetime | None = None
+    agent_prompt: str = ""
     agent_report: str = ""
     reviewer_verdict: str = ""
     review_type: str = ""

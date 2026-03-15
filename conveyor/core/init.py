@@ -8,14 +8,6 @@ from conveyor.tracking.markdown import MarkdownStore
 from conveyor.tracking.models import Agent
 
 
-AGENT_DEFAULTS = {
-    "frontend": "UI components, styles, client-side logic",
-    "backend": "APIs, models, business logic, migrations",
-    "testing": "Write and fix tests",
-    "devops": "CI/CD, Docker, infrastructure configs",
-    "reviewer": "Post-execution review, code quality checks",
-}
-
 STACK_INDICATORS = {
     "pyproject.toml": "Python",
     "setup.py": "Python",
@@ -27,6 +19,14 @@ STACK_INDICATORS = {
     "Gemfile": "Ruby",
     "pom.xml": "Java",
     "build.gradle": "Java",
+}
+
+AGENT_DEFAULTS = {
+    "frontend": "Frontend specialist. UI components, styles, client-side logic.",
+    "backend": "Backend specialist. APIs, models, business logic, migrations.",
+    "testing": "Testing specialist. Write and fix tests, ensure meaningful coverage.",
+    "devops": "DevOps specialist. CI/CD, Docker, infrastructure configs.",
+    "reviewer": "Code review specialist. Verify scope, correctness, and test coverage.",
 }
 
 
@@ -51,7 +51,12 @@ def run_init(repo_dir: Path) -> InitResult:
     if not config_path.exists():
         save_config(default_config(), config_path)
 
-    # Create default agent files
+    # Detect stack
+    for filename, stack in STACK_INDICATORS.items():
+        if (repo_dir / filename).exists() and stack not in result.stack_detected:
+            result.stack_detected.append(stack)
+
+    # Create lightweight agent stubs — the orchestrator enriches these at intent-time
     for name, role in AGENT_DEFAULTS.items():
         agent_path = conveyor_dir / "agents" / f"{name}.md"
         if not agent_path.exists():
@@ -66,11 +71,6 @@ def run_init(repo_dir: Path) -> InitResult:
                 f.write("\n.conveyor/\n")
     else:
         gitignore_path.write_text(".conveyor/\n")
-
-    # Detect stack
-    for filename, stack in STACK_INDICATORS.items():
-        if (repo_dir / filename).exists() and stack not in result.stack_detected:
-            result.stack_detected.append(stack)
 
     # Read CLAUDE.md
     claude_md_path = repo_dir / "CLAUDE.md"

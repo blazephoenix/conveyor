@@ -170,6 +170,7 @@ class Runner:
             agent=agent,
             codebase_context=codebase_ctx,
             prior_work=prior,
+            agent_prompt=issue.agent_prompt,
         )
         result = self.adapter.execute(
             prompt=prompt,
