@@ -7,18 +7,59 @@ app = typer.Typer(name="conveyor", help="AI-native project orchestration")
 def init():
     """Scan repo, create .conveyor/, detect stack."""
     from pathlib import Path
+    from rich.console import Console
+    from rich.panel import Panel
     from conveyor.core.init import run_init
 
+    console = Console()
     repo_dir = Path.cwd()
     result = run_init(repo_dir)
 
-    typer.echo(f"Created {result.conveyor_dir}")
-    typer.echo(f"Scanned {result.file_count} files")
+    banner = """
+   _____ ____  _   ___     _______ ____  ____
+  / ____/ __ \\| \\ | \\ \\   / / ____\\ \\/ / __ \\
+ | |   | |  | |  \\| |\\ \\_/ / |     \\  / |  | |
+ | |   | |  | | . ` | \\   /| |__    | || |  | |
+ | |___| |__| | |\\  |  | | | |___   | || |__| |
+  \\_____\\____/|_| \\_|  |_| |______|_/ \\_\\____/
+
+    AI-native project orchestration
+"""
+    console.print(banner, style="bold cyan")
+
+    # Summary
+    details = []
+    details.append(f"[green]v[/green] Initialized .conveyor/")
+    details.append(f"[green]v[/green] Scanned {result.file_count} files")
     if result.stack_detected:
-        typer.echo(f"Detected: {', '.join(result.stack_detected)}")
+        details.append(f"[green]v[/green] Detected: [bold]{', '.join(result.stack_detected)}[/bold]")
     if result.claude_md:
-        typer.echo("CLAUDE.md found — using as project profile")
-    typer.echo("Default agents created (frontend, backend, testing, devops, reviewer)")
+        details.append(f"[green]v[/green] CLAUDE.md found — using as project profile")
+    details.append(f"[green]v[/green] Agents ready: frontend, backend, testing, devops, reviewer")
+
+    console.print(Panel("\n".join(details), title="Project Setup", border_style="green"))
+    console.print()
+
+    # Getting started
+    help_text = (
+        "[bold]Get started:[/bold]\n"
+        "\n"
+        "  conveyor intent [cyan]\"Add user authentication\"[/cyan]\n"
+        "    Decompose an intent into tasks, execute, and merge\n"
+        "\n"
+        "  conveyor status\n"
+        "    Show current intent progress\n"
+        "\n"
+        "  conveyor issues [dim][ISSUE_ID][/dim]\n"
+        "    List all issues or inspect a specific one\n"
+        "\n"
+        "  conveyor review\n"
+        "    Review pending medium/high risk merges\n"
+        "\n"
+        "  conveyor log [dim]--issue ISS-001[/dim]\n"
+        "    Show activity trail\n"
+    )
+    console.print(Panel(help_text, title="Commands", border_style="dim"))
 
 
 @app.command()
@@ -133,6 +174,7 @@ def intent(message: str = typer.Argument(..., help="The intent to execute")):
             files_allowed=t.get("files_allowed", []),
             files_forbidden=t.get("files_forbidden", []),
             acceptance_criteria=t.get("acceptance_criteria", []),
+            agent_prompt=t.get("agent_prompt", ""),
         )
         issues_list.append(issue_obj)
         intent_obj.issues.append(issue_id)
