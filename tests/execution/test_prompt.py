@@ -19,15 +19,14 @@ def test_build_worker_prompt_has_all_sections():
         files_forbidden=["src/api/*"],
         acceptance_criteria=["User model in src/models/user.py"],
     )
-    agent = Agent(name="backend", role="APIs, models, business logic")
+    agent = Agent(name="backend", role="You are a backend specialist.\n\nAPIs, models, business logic.")
     prompt = build_worker_prompt(
         issue=issue,
         agent=agent,
         codebase_context="File tree here",
         prior_work="",
     )
-    assert "Conveyor" in prompt
-    assert "backend" in prompt
+    assert "backend specialist" in prompt
     assert "ISS-001" in prompt
     assert "User model" in prompt
     assert "src/models/user.py" in prompt

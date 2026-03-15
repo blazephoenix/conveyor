@@ -8,26 +8,19 @@ def build_worker_prompt(
     agent: Agent,
     codebase_context: str,
     prior_work: str,
-    agent_prompt: str = "",
 ) -> str:
     sections = []
 
-    # Section 1: Identity — use orchestrator-generated prompt if available
-    if agent_prompt:
-        identity = f"## 1. Identity\n\n{agent_prompt}"
-    else:
-        identity = (
-            f"## 1. Identity\n\n"
-            f"You are a Conveyor {agent.name} agent. Your role: {agent.role}."
-        )
-    identity += (
-        "\n\n**Rules (always apply):**\n"
-        "- Do EXACTLY what is asked, no more, no less.\n"
-        "- Do NOT modify files outside your allowed scope.\n"
-        "- Follow existing patterns in the codebase.\n"
-        "- Be precise and minimal."
+    # Section 1: Identity — agent.role contains the full stack-specific prompt
+    sections.append(
+        f"## 1. Identity\n\n"
+        f"{agent.role}\n\n"
+        f"**Rules (always apply):**\n"
+        f"- Do EXACTLY what is asked, no more, no less.\n"
+        f"- Do NOT modify files outside your allowed scope.\n"
+        f"- Follow existing patterns in the codebase.\n"
+        f"- Be precise and minimal."
     )
-    sections.append(identity)
 
     # Section 2: Task
     criteria = "\n".join(f"- {c}" for c in issue.acceptance_criteria)
@@ -133,18 +126,11 @@ Analyze the codebase and the intent. Produce a task graph.
 For each task, specify:
 - title: short descriptive name
 - agent: one of (frontend, backend, testing, devops)
-- agent_prompt: a rich, detailed system prompt for this specific agent, tailored to the project's stack, frameworks, and conventions. Follow this structure:
-  1. Role identity ("You are a [stack] [role] specialist")
-  2. Core responsibilities (3-5 numbered items specific to this task)
-  3. Quality standards (bullet points with stack-specific conventions — e.g., "use type hints" for Python, "use async/await" for Node.js, "check errors with if err != nil" for Go)
-  4. Boundaries (what the agent must NOT touch)
 - files_allowed: files this task should create or modify
 - files_forbidden: files this task must NOT touch
 - depends_on: list of task numbers this depends on (e.g., [1, 2])
 - risk: low (new files only), medium (modifies existing files), high (architectural changes)
 - acceptance_criteria: list of concrete criteria
-
-The agent_prompt is critical — it should reflect the EXACT frameworks and patterns you observe in the codebase. For example, if you see Next.js App Router, the prompt should reference App Router conventions, not Pages Router. If you see pytest fixtures, the testing prompt should mention fixtures specifically.
 
 Output your plan in EXACTLY this format:
 
@@ -155,7 +141,6 @@ CONVEYOR_PLAN_START
     "task_number": 1,
     "title": "...",
     "agent": "backend",
-    "agent_prompt": "You are a [specific] specialist...\\n\\n**Core Responsibilities:**\\n...",
     "files_allowed": ["src/..."],
     "files_forbidden": ["src/..."],
     "depends_on": [],

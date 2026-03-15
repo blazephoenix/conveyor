@@ -185,7 +185,6 @@ def intent(message: str = typer.Argument(..., help="The intent to execute")):
             files_allowed=t.get("files_allowed", []),
             files_forbidden=t.get("files_forbidden", []),
             acceptance_criteria=t.get("acceptance_criteria", []),
-            agent_prompt=t.get("agent_prompt", ""),
         )
         issues_list.append(issue_obj)
         intent_obj.issues.append(issue_id)
