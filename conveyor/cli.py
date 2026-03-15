@@ -181,22 +181,163 @@ def intent(message: str = typer.Argument(..., help="The intent to execute")):
 @app.command()
 def status():
     """Show current intent progress and issue states."""
-    typer.echo("Not implemented yet")
+    from pathlib import Path
+    from rich.console import Console
+    from rich.table import Table
+    from conveyor.tracking.markdown import MarkdownStore
+
+    console = Console()
+    store = MarkdownStore(Path.cwd() / ".conveyor")
+
+    intents = store.list_intents()
+    if not intents:
+        console.print("No intents found.")
+        return
+
+    for intent_obj in intents:
+        console.print(f"\n[bold]{intent_obj.id}: {intent_obj.title}[/bold]  ({intent_obj.status})")
+        issues_list = store.list_issues(intent_id=intent_obj.id)
+        table = Table()
+        table.add_column("Issue")
+        table.add_column("Status")
+        table.add_column("Agent")
+        table.add_column("Risk")
+        for issue_obj in issues_list:
+            status_color = {
+                "complete": "green", "failed": "red", "blocked": "yellow",
+                "running": "cyan", "paused": "magenta",
+            }.get(str(issue_obj.status), "white")
+            table.add_row(
+                f"{issue_obj.id}: {issue_obj.title}",
+                f"[{status_color}]{issue_obj.status}[/{status_color}]",
+                issue_obj.agent,
+                str(issue_obj.risk),
+            )
+        console.print(table)
 
 
 @app.command()
 def issues(issue_id: str = typer.Argument(None, help="Specific issue ID")):
     """List issues or show detail for a specific issue."""
-    typer.echo("Not implemented yet")
+    from pathlib import Path
+    from rich.console import Console
+    from conveyor.tracking.markdown import MarkdownStore
+
+    console = Console()
+    store = MarkdownStore(Path.cwd() / ".conveyor")
+
+    if issue_id:
+        try:
+            issue_obj = store.load_issue(issue_id)
+            console.print(f"\n[bold]{issue_obj.id}: {issue_obj.title}[/bold]")
+            console.print(f"Status: {issue_obj.status}")
+            console.print(f"Agent: {issue_obj.agent}")
+            console.print(f"Branch: {issue_obj.branch}")
+            console.print(f"Risk: {issue_obj.risk}")
+            console.print(f"Depends on: {', '.join(issue_obj.depends_on) or '—'}")
+            if issue_obj.acceptance_criteria:
+                console.print("\nAcceptance criteria:")
+                for c in issue_obj.acceptance_criteria:
+                    console.print(f"  - {c}")
+            if issue_obj.agent_report:
+                console.print(f"\nAgent report:\n{issue_obj.agent_report}")
+            if issue_obj.reviewer_verdict:
+                console.print(f"\nReviewer verdict:\n{issue_obj.reviewer_verdict}")
+            if issue_obj.activity_log:
+                console.print("\nActivity log:")
+                for entry in issue_obj.activity_log:
+                    console.print(f"  {entry}")
+        except FileNotFoundError:
+            console.print(f"[red]Issue {issue_id} not found.[/red]")
+    else:
+        all_issues = store.list_issues()
+        if not all_issues:
+            console.print("No issues found.")
+            return
+        for issue_obj in all_issues:
+            status_color = {
+                "complete": "green", "failed": "red", "blocked": "yellow",
+                "running": "cyan", "paused": "magenta",
+            }.get(str(issue_obj.status), "white")
+            console.print(
+                f"  {issue_obj.id}: [{status_color}]{issue_obj.status}[/{status_color}] "
+                f"{issue_obj.title} ({issue_obj.agent}, {issue_obj.risk})"
+            )
 
 
 @app.command()
 def review():
     """Review pending medium/high risk merges."""
-    typer.echo("Not implemented yet")
+    from pathlib import Path
+    from rich.console import Console
+    from conveyor.tracking.markdown import MarkdownStore
+    from conveyor.tracking.models import IssueStatus
+    from conveyor.execution.branch import checkout_branch, merge_branch, branch_diff
+
+    console = Console()
+    repo_dir = Path.cwd()
+    store = MarkdownStore(repo_dir / ".conveyor")
+
+    paused = [i for i in store.list_issues() if i.status == IssueStatus.PAUSED]
+    if not paused:
+        console.print("Nothing to review.")
+        return
+
+    for issue_obj in paused:
+        console.print(f"\n[bold]{issue_obj.id}: {issue_obj.title}[/bold]")
+        console.print(f"  Review type: {issue_obj.review_type}")
+        console.print(f"  Risk: {issue_obj.risk}")
+        console.print(f"  Branch: {issue_obj.branch}")
+
+        choice = typer.prompt("  [a]pprove  [d]iff  [r]eject", default="a")
+        if choice.lower() == "d":
+            diff = branch_diff(issue_obj.branch, "main", repo_dir)
+            console.print(diff)
+            choice = typer.prompt("  [a]pprove  [r]eject", default="a")
+
+        if choice.lower() == "a":
+            if issue_obj.review_type == "merge":
+                checkout_branch("main", repo_dir)
+                ok = merge_branch(issue_obj.branch, repo_dir)
+                if ok:
+                    issue_obj.status = IssueStatus.COMPLETE
+                    console.print("  [green]Merged[/green]")
+                else:
+                    issue_obj.status = IssueStatus.FAILED
+                    console.print("  [red]Merge conflict[/red]")
+            elif issue_obj.review_type == "plan":
+                issue_obj.status = IssueStatus.QUEUED
+                issue_obj.review_type = ""
+                console.print("  [green]Plan approved[/green]")
+            store.save_issue(issue_obj)
+        else:
+            issue_obj.status = IssueStatus.FAILED
+            store.save_issue(issue_obj)
+            console.print("  [red]Rejected[/red]")
 
 
 @app.command()
 def log(issue: str = typer.Option(None, "--issue", help="Filter by issue ID")):
     """Show activity trail."""
-    typer.echo("Not implemented yet")
+    from pathlib import Path
+    from rich.console import Console
+    from conveyor.tracking.markdown import MarkdownStore
+
+    console = Console()
+    store = MarkdownStore(Path.cwd() / ".conveyor")
+
+    if issue:
+        try:
+            issue_obj = store.load_issue(issue)
+            console.print(f"\n[bold]Log for {issue_obj.id}: {issue_obj.title}[/bold]\n")
+            for entry in issue_obj.activity_log:
+                console.print(f"  {entry}")
+        except FileNotFoundError:
+            console.print(f"[red]Issue {issue} not found.[/red]")
+    else:
+        all_issues = store.list_issues()
+        for issue_obj in all_issues:
+            if issue_obj.activity_log:
+                console.print(f"\n[bold]{issue_obj.id}: {issue_obj.title}[/bold]")
+                for entry in issue_obj.activity_log:
+                    console.print(f"  {entry}")
