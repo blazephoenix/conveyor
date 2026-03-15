@@ -66,30 +66,194 @@ If you hit a bug, [open an issue](https://github.com/blazephoenix/conveyor/issue
 
 ### Install
 
+Conveyor is not on PyPI yet. Install from source:
+
 ```bash
-# From source (recommended during alpha)
+# 1. Clone the repo
 git clone https://github.com/blazephoenix/conveyor.git
 cd conveyor
-pip install -e .
 
-# Or with uv
-uv pip install -e .
+# 2. Create a virtual environment (Python 3.11+ required)
+python3 -m venv .venv
+source .venv/bin/activate
+
+# Or with uv (recommended — handles Python version automatically)
+uv venv --python 3.12 .venv
+source .venv/bin/activate
+
+# 3. Install in editable mode
+pip install -e .
+# or: uv pip install -e .
 ```
 
-### Quick Start
+### Using Conveyor in another project
+
+Since Conveyor is installed from source into its own venv, you have two options:
 
 ```bash
-# 1. Navigate to any git repo
+# Option A: Activate the venv first, then commands work normally
+source /path/to/conveyor/.venv/bin/activate
 cd your-project
-
-# 2. Initialize Conveyor
 conveyor init
+conveyor intent "Add a health endpoint"
 
-# 3. Run an intent
-conveyor intent "Add a health endpoint to the API"
+# Option B: Use the full path every time (no activation needed)
+cd your-project
+/path/to/conveyor/.venv/bin/conveyor init
+/path/to/conveyor/.venv/bin/conveyor intent "Add a health endpoint"
 ```
 
-Conveyor will scan your repo, detect your stack, create a plan, ask for your approval, and execute.
+> **Tip:** You can alias it in your shell profile:
+> ```bash
+> alias conveyor="/path/to/conveyor/.venv/bin/conveyor"
+> ```
+
+### Walkthrough
+
+Here's a complete example — initializing Conveyor in a Next.js project and running an intent.
+
+#### Step 1: Initialize
+
+```bash
+cd your-project
+conveyor init
+```
+
+You'll see:
+
+```
+ ██████╗ ██████╗ ███╗   ██╗██╗   ██╗███████╗██╗   ██╗ ██████╗ ██████╗
+██╔════╝██╔═══██╗████╗  ██║██║   ██║██╔════╝╚██╗ ██╔╝██╔═══██╗██╔══██╗
+...
+┌   conveyor init
+│
+│  Project: /home/you/your-project
+│
+◆  Initialized .conveyor/
+◆  Scanned 847 files
+◇  Detected: Node.js, TypeScript
+◆  Agents created: frontend, backend, testing, devops, reviewer
+│
+◇  Next commands ─────────────────────────────────╮
+│  conveyor intent "..."  Decompose and execute    │
+│  conveyor status       Show intent progress      │
+│  ...                                             │
+├──────────────────────────────────────────────────╯
+│
+└  Ready!
+```
+
+This creates a `.conveyor/` directory with config, agent definitions (tailored to your detected stack), and empty directories for intents, issues, and sessions.
+
+#### Step 2: Run an intent
+
+```bash
+conveyor intent "Create a health endpoint in the API routes"
+```
+
+Conveyor will:
+
+**1. Analyze your codebase** — scans file tree, reads git history, loads CLAUDE.md if present:
+
+```
+┌   conveyor intent
+│
+│  Intent: Create a health endpoint in the API routes
+│
+│  [0s] Scanning file tree...
+│  [0s] Found 30 entries in file tree
+│  [1s] Reading git history...
+│  [1s] Assembling orchestrator prompt...
+│  [1s] Sending to orchestrator — analyzing codebase and decomposing intent...
+│  [25s] Orchestrator responded in 24.9s — parsing plan...
+│  [25s] Extracted 2 tasks from plan
+```
+
+**2. Show the plan** — a table of tasks with agents, risk levels, and dependencies:
+
+```
+                         Plan: 2 tasks
+┏━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Task               ┃ Agent   ┃ Risk ┃ Depends on ┃ Files                 ┃
+┡━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━┩
+│ 1. Create GET      │ backend │ low  │ —          │ src/app/api/health/   │
+│    /api/health     │         │      │            │ route.ts              │
+│ 2. Verify endpoint │ testing │ low  │ 1          │                       │
+│    passes lint     │         │      │            │                       │
+└────────────────────┴─────────┴──────┴────────────┴───────────────────────┘
+
+[a]pprove  [r]eject [a]:
+```
+
+**3. Execute** — type `a` (or press Enter) to approve. Conveyor creates branches, dispatches agents, and shows progress:
+
+```
+◇  Executing task graph... (2 tasks)
+│
+│  [27s | 0%] [ISS-001] Creating branch conveyor/iss-001-create-get-api-health-route
+│  [27s | 0%] [ISS-001] Dispatching backend agent — Create GET /api/health route
+│  [55s | 16%] [ISS-001] Agent completed in 28.0s — moving to validation
+│  [55s | 16%] [ISS-001] Scope check passed
+│  [56s | 33%] [ISS-001] Dispatching reviewer agent...
+│  [78s | 50%] [ISS-001] Reviewer verdict: PASSED — All criteria met
+│  ...
+│  [120s | 100%] Returning to main branch
+│
+◇  Summary ──────────────────────────────────────╮
+│                                                 │
+│  All 2 tasks completed and merged               │
+│  Total time: 2m00s                              │
+│                                                 │
+├─────────────────────────────────────────────────╯
+│
+└  Intent complete!
+```
+
+Use `--yes` to skip the approval prompt: `conveyor intent --yes "..."`.
+
+#### Step 3: If something fails
+
+Tasks can fail if the agent produces bad code, violates scope, or the reviewer rejects the work. When that happens:
+
+```bash
+# See what failed
+conveyor status
+conveyor issues ISS-001    # detailed view with agent report + reviewer verdict
+
+# Retry the failed task (also unblocks downstream tasks)
+conveyor retry ISS-001
+
+# Or retry all failed tasks automatically
+conveyor retry
+```
+
+#### Step 4: Review medium/high risk changes
+
+If a task is medium or high risk, Conveyor pauses and asks for your approval before merging:
+
+```bash
+conveyor review
+```
+
+You can view the diff before deciding:
+
+```
+ISS-003: Add authentication middleware
+  Review type: merge
+  Risk: medium
+  Branch: conveyor/iss-003-add-auth-middleware
+  [a]pprove  [d]iff  [r]eject:
+```
+
+#### Step 5: Check the activity trail
+
+```bash
+# Full activity log across all issues
+conveyor log
+
+# Log for a specific issue
+conveyor log --issue ISS-001
+```
 
 ## How It Works
 
