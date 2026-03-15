@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "conveyor"
+version = "0.1.0"
+description = "AI-native project orchestration for engineering teams"
+requires-python = ">=3.11"
+dependencies = [
+    "typer>=0.9.0",
+    "pyyaml>=6.0",
+    "rich>=13.0",
+]
+
+[project.scripts]
+conveyor = "conveyor.cli:app"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+]
