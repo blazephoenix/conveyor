@@ -6,7 +6,19 @@ app = typer.Typer(name="conveyor", help="AI-native project orchestration")
 @app.command()
 def init():
     """Scan repo, create .conveyor/, detect stack."""
-    typer.echo("Not implemented yet")
+    from pathlib import Path
+    from conveyor.core.init import run_init
+
+    repo_dir = Path.cwd()
+    result = run_init(repo_dir)
+
+    typer.echo(f"Created {result.conveyor_dir}")
+    typer.echo(f"Scanned {result.file_count} files")
+    if result.stack_detected:
+        typer.echo(f"Detected: {', '.join(result.stack_detected)}")
+    if result.claude_md:
+        typer.echo("CLAUDE.md found — using as project profile")
+    typer.echo("Default agents created (frontend, backend, testing, devops, reviewer)")
 
 
 @app.command()
