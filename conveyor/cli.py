@@ -53,6 +53,7 @@ def init():
     console.print("[bold]│[/bold]  [cyan]conveyor intent \"...\"[/cyan]  Decompose and execute     [bold]│[/bold]")
     console.print("[bold]│[/bold]  [cyan]conveyor status[/cyan]       Show intent progress       [bold]│[/bold]")
     console.print("[bold]│[/bold]  [cyan]conveyor issues[/cyan]       List or inspect issues      [bold]│[/bold]")
+    console.print("[bold]│[/bold]  [cyan]conveyor retry[/cyan]        Retry failed issues         [bold]│[/bold]")
     console.print("[bold]│[/bold]  [cyan]conveyor review[/cyan]       Review pending merges       [bold]│[/bold]")
     console.print("[bold]│[/bold]  [cyan]conveyor log[/cyan]          Show activity trail         [bold]│[/bold]")
     console.print("[bold]│[/bold]                                                    [bold]│[/bold]")
@@ -381,6 +382,145 @@ def review():
             issue_obj.status = IssueStatus.FAILED
             store.save_issue(issue_obj)
             console.print("  [red]Rejected[/red]")
+
+
+@app.command()
+def retry(
+    issue_id: str = typer.Argument(None, help="Retry a specific issue ID, or all failed issues for an intent"),
+    intent_id: str = typer.Option(None, "--intent", help="Retry all failed/blocked issues for this intent"),
+):
+    """Retry failed or blocked issues."""
+    from pathlib import Path
+    from rich.console import Console
+    from conveyor.config import load_config
+    from conveyor.execution.runner import Runner
+    from conveyor.execution.branch import checkout_branch
+    from conveyor.tracking.markdown import MarkdownStore
+    from conveyor.tracking.models import IssueStatus
+    from conveyor.tracking.events import emit
+
+    console = Console()
+    repo_dir = Path.cwd()
+    conveyor_dir = repo_dir / ".conveyor"
+
+    if not conveyor_dir.exists():
+        console.print("[red]Not a Conveyor project. Run 'conveyor init' first.[/red]")
+        raise typer.Exit(1)
+
+    config = load_config(conveyor_dir / "config.toml")
+    store = MarkdownStore(conveyor_dir)
+
+    # Collect issues to retry
+    issues_to_retry = []
+
+    if issue_id:
+        try:
+            issue_obj = store.load_issue(issue_id)
+            if issue_obj.status not in (IssueStatus.FAILED, IssueStatus.BLOCKED):
+                console.print(f"[yellow]{issue_id} is {issue_obj.status}, not failed/blocked — nothing to retry.[/yellow]")
+                raise typer.Exit(0)
+            issues_to_retry.append(issue_obj)
+            intent_id = issue_obj.intent
+        except FileNotFoundError:
+            console.print(f"[red]Issue {issue_id} not found.[/red]")
+            raise typer.Exit(1)
+    elif intent_id:
+        all_issues = store.list_issues(intent_id=intent_id)
+        issues_to_retry = [i for i in all_issues if i.status in (IssueStatus.FAILED, IssueStatus.BLOCKED)]
+        if not issues_to_retry:
+            console.print(f"[yellow]No failed/blocked issues for {intent_id}.[/yellow]")
+            raise typer.Exit(0)
+    else:
+        # Find most recent intent with failed issues
+        intents = store.list_intents()
+        for intent_obj in reversed(intents):
+            all_issues = store.list_issues(intent_id=intent_obj.id)
+            failed = [i for i in all_issues if i.status in (IssueStatus.FAILED, IssueStatus.BLOCKED)]
+            if failed:
+                issues_to_retry = failed
+                intent_id = intent_obj.id
+                break
+        if not issues_to_retry:
+            console.print("[yellow]No failed/blocked issues found.[/yellow]")
+            raise typer.Exit(0)
+
+    # Show what we're retrying
+    console.print()
+    console.print("[bold]┌[/bold]   [bold]conveyor retry[/bold]")
+    console.print("[bold]│[/bold]")
+
+    for issue_obj in issues_to_retry:
+        console.print(f"[bold]│[/bold]  Resetting [bold]{issue_obj.id}[/bold]: {issue_obj.title} ([red]{issue_obj.status}[/red] -> created)")
+
+    console.print("[bold]│[/bold]")
+
+    # Reset issues
+    for issue_obj in issues_to_retry:
+        issue_obj.status = IssueStatus.CREATED
+        issue_obj.agent_report = ""
+        issue_obj.reviewer_verdict = ""
+        issue_obj.review_type = ""
+        emit(issue_obj.activity_log, issue_obj.id, "retry", "reset to created for retry")
+        store.save_issue(issue_obj)
+
+    # Also unblock any issues that were blocked due to these failures
+    all_issues = store.list_issues(intent_id=intent_id)
+    retried_ids = {i.id for i in issues_to_retry}
+    for issue_obj in all_issues:
+        if issue_obj.status == IssueStatus.BLOCKED and issue_obj.id not in retried_ids:
+            # Check if it was blocked because of one of the retried issues
+            if any(dep in retried_ids for dep in issue_obj.depends_on):
+                issue_obj.status = IssueStatus.CREATED
+                emit(issue_obj.activity_log, issue_obj.id, "retry", "unblocked — upstream issue retrying")
+                store.save_issue(issue_obj)
+                console.print(f"[bold]│[/bold]  Unblocked [bold]{issue_obj.id}[/bold]: {issue_obj.title}")
+
+    # Reload all issues for the intent and run
+    all_issues = store.list_issues(intent_id=intent_id)
+    checkout_branch("main", repo_dir)
+
+    console.print("[bold]│[/bold]")
+    console.print("[bold]◇[/bold]  [bold]Re-executing...[/bold]")
+    console.print("[bold]│[/bold]")
+
+    def execution_progress(msg: str) -> None:
+        console.print(f"[bold]│[/bold]  [dim]{msg}[/dim]")
+
+    def on_pause(paused_issue):
+        console.print(f"\n[bold]{paused_issue.id}: {paused_issue.title}[/bold]")
+        console.print(f"  Review type: {paused_issue.review_type}")
+        console.print(f"  Risk: {paused_issue.risk}")
+        choice = typer.prompt("  [a]pprove  [r]eject", default="a")
+        return choice.lower() == "a"
+
+    runner = Runner(
+        issues=all_issues,
+        store=store,
+        config=config,
+        repo_dir=repo_dir,
+        on_progress=execution_progress,
+    )
+
+    events = runner.run(on_pause=on_pause)
+
+    # Summary
+    console.print("[bold]│[/bold]")
+    completed = sum(1 for i in all_issues if i.status == IssueStatus.COMPLETE)
+    failed = sum(1 for i in all_issues if i.status == IssueStatus.FAILED)
+    blocked = sum(1 for i in all_issues if i.status == IssueStatus.BLOCKED)
+
+    if failed == 0 and blocked == 0:
+        console.print(f"[bold]└[/bold]  [green]All {completed} tasks complete![/green]")
+    else:
+        console.print(f"[bold]└[/bold]  Completed: {completed}  Failed: {failed}  Blocked: {blocked}")
+
+    # Update intent status
+    try:
+        intent_obj = store.load_intent(intent_id)
+        intent_obj.status = "complete" if (failed == 0 and blocked == 0) else "partial"
+        store.save_intent(intent_obj)
+    except FileNotFoundError:
+        pass
 
 
 @app.command()
